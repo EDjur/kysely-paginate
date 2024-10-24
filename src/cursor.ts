@@ -325,7 +325,7 @@ export function defaultDecodeCursor<
       ...new URLSearchParams(
         Buffer.from(cursor, "base64url").toString("utf8"),
       ).entries(),
-    ];
+    ] as [string, string | null][];
   } catch {
     throw new Error("Unparsable cursor");
   }
@@ -348,7 +348,6 @@ export function defaultDecodeCursor<
 
     const [_fieldName, value] = field;
     if (value === "null") {
-      // @ts-ignore
       field[1] = null;
     }
   }
