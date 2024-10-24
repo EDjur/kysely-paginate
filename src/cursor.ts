@@ -3,7 +3,10 @@ import {
   ReferenceExpression,
   SelectQueryBuilder,
   StringReference,
+  sql,
 } from "kysely";
+
+type NullOrder = "NULLS LAST" | "NULLS FIRST";
 
 type SortField<DB, TB extends keyof DB, O> =
   | {
@@ -12,11 +15,13 @@ type SortField<DB, TB extends keyof DB, O> =
         | (StringReference<DB, TB> & `${string}.${keyof O & string}`);
       direction: OrderByDirectionExpression;
       key?: keyof O & string;
+      nullOrder?: NullOrder;
     }
   | {
       expression: ReferenceExpression<DB, TB>;
       direction: OrderByDirectionExpression;
       key: keyof O & string;
+      nullOrder?: NullOrder;
     };
 
 type ExtractSortFieldKey<
@@ -72,7 +77,7 @@ export type CursorDecoder<
   T extends Fields<DB, TB, O>,
 > = (
   cursor: string,
-  fields: FieldNames<DB, TB, O, T>,
+  fields: FieldNames<DB, TB, O, T>
 ) => DecodedCursor<DB, TB, O, T>;
 
 type ParsedCursorValues<
@@ -134,7 +139,7 @@ export async function executeWithCursorPagination<
     parseCursor:
       | CursorParser<DB, TB, O, TFields>
       | { parse: CursorParser<DB, TB, O, TFields> };
-  },
+  }
 ): Promise<CursorPaginationResult<O, TCursorKey>> {
   const encodeCursor = opts.encodeCursor ?? defaultEncodeCursor;
   const decodeCursor = opts.decodeCursor ?? defaultDecodeCursor;
@@ -179,7 +184,7 @@ export async function executeWithCursorPagination<
   function applyCursor(
     qb: SelectQueryBuilder<DB, TB, O>,
     encoded: string,
-    defaultDirection: "asc" | "desc",
+    defaultDirection: "asc" | "desc"
   ) {
     const decoded = decodeCursor(encoded, fieldNames);
     const cursor = parseCursor(decoded);
@@ -197,7 +202,8 @@ export async function executeWithCursorPagination<
         const conditions = [eb(field.expression, comparison, value)];
 
         if (expression) {
-          conditions.push(and([eb(field.expression, "=", value), expression]));
+          const sign = value === null ? "is" : "=";
+          conditions.push(and([eb(field.expression, sign, value), expression]));
         }
 
         expression = or(conditions);
@@ -216,11 +222,16 @@ export async function executeWithCursorPagination<
 
   const reversed = !!opts.before && !opts.after;
 
-  for (const { expression, direction } of fields) {
-    qb = qb.orderBy(
-      expression,
-      reversed ? (direction === "asc" ? "desc" : "asc") : direction,
-    );
+  for (const { expression, direction, nullOrder } of fields) {
+    let dir = reversed ? (direction === "asc" ? "desc" : "asc") : direction;
+
+    if (nullOrder === "NULLS LAST") {
+      dir = sql`${sql.raw(String(dir))} NULLS LAST`;
+    } else if (nullOrder === "NULLS FIRST") {
+      dir = sql`${sql.raw(String(dir))} NULLS FIRST`;
+    }
+
+    qb = qb.orderBy(expression, dir);
   }
 
   const rows = await qb.limit(opts.perPage + 1).execute();
@@ -268,17 +279,21 @@ export function defaultEncodeCursor<
   const cursor = new URLSearchParams();
 
   for (const [key, value] of values) {
-    switch (typeof value) {
-      case "string":
+    switch (true) {
+      case value === null: {
+        cursor.set(key, "null");
+        break;
+      }
+      case typeof value === "string":
         cursor.set(key, value);
         break;
 
-      case "number":
-      case "bigint":
+      case typeof value === "number":
+      case typeof value === "bigint":
         cursor.set(key, value.toString(10));
         break;
 
-      case "object": {
+      case typeof value === "object": {
         if (value instanceof Date) {
           cursor.set(key, value.toISOString());
           break;
@@ -301,14 +316,14 @@ export function defaultDecodeCursor<
   T extends Fields<DB, TB, O>,
 >(
   cursor: string,
-  fields: FieldNames<DB, TB, O, T>,
+  fields: FieldNames<DB, TB, O, T>
 ): DecodedCursor<DB, TB, O, T> {
   let parsed;
 
   try {
     parsed = [
       ...new URLSearchParams(
-        Buffer.from(cursor, "base64url").toString("utf8"),
+        Buffer.from(cursor, "base64url").toString("utf8")
       ).entries(),
     ];
   } catch {
@@ -329,6 +344,12 @@ export function defaultDecodeCursor<
 
     if (field[0] !== expectedName) {
       throw new Error("Unexpected field name");
+    }
+
+    const [_fieldName, value] = field;
+    if (value === "null") {
+      // @ts-ignore
+      field[1] = null;
     }
   }
 

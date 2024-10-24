@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, test } from "vitest";
 import { z } from "zod";
+import { sql } from "kysely";
 import {
   defaultDecodeCursor,
   defaultEncodeCursor,
@@ -464,6 +465,125 @@ databases.forEach(([kind, db]) => {
         expect(decodedCursor).toEqual({ id: "0" });
       });
     });
+
+    // MySql doesn't support NULLS LAST syntax
+    describe.skipIf(kind === "mysql")(
+      "when providing an 'after' cursor (with nullable)",
+      () => {
+        it("works correctly with a multiple sorts and a nullable field", async () => {
+          const posts = await createSampleBlogPosts(db, 6);
+
+          const query = db.selectFrom("blogPosts").select(["id", "viewCount"]);
+
+          const firstPage = await executeWithCursorPagination(query, {
+            perPage: 3,
+            fields: [
+              {
+                expression: "viewCount",
+                direction: "desc",
+                nullOrder: "NULLS LAST",
+              },
+              { expression: "id", direction: "asc" },
+            ],
+            parseCursor: z.object({
+              id: z.coerce.number().int(),
+              viewCount: z.number().nullable(),
+            }),
+          });
+
+          expect(firstPage.hasNextPage).toBe(true);
+          expect(firstPage.hasPrevPage).toBe(undefined);
+          expect(firstPage.rows[0]?.id).toEqual(posts[1]?.id);
+          expect(firstPage.rows[1]?.id).toEqual(posts[0]?.id);
+          expect(firstPage.rows[2]?.id).toEqual(posts[2]?.id);
+
+          const secondPage = await executeWithCursorPagination(query, {
+            perPage: 3,
+            after: firstPage.endCursor,
+            fields: [
+              { expression: "viewCount", direction: "desc" },
+              { expression: "id", direction: "asc" },
+            ],
+            parseCursor: z.object({
+              id: z.coerce.number().int(),
+              viewCount: z.preprocess((val) => {
+                if (val === null) return null;
+                return val;
+              }, z.coerce.number().nullable()),
+            }),
+          });
+
+          expect(secondPage.hasNextPage).toBe(false);
+          expect(secondPage.hasPrevPage).toBe(undefined);
+          expect(secondPage.rows[0]?.id).toEqual(posts[3]?.id);
+          expect(secondPage.rows[1]?.id).toEqual(posts[4]?.id);
+          expect(secondPage.rows[2]?.id).toEqual(posts[5]?.id);
+        });
+
+        it("works correctly with a multiple sorts, a nullable field, and non-null cursor", async () => {
+          const posts = await createSampleBlogPosts(db, 4);
+
+          const query = db.selectFrom("blogPosts").select(["id", "viewCount"]);
+
+          const firstPage = await executeWithCursorPagination(query, {
+            perPage: 2,
+            fields: [
+              {
+                expression: db.fn.coalesce(
+                  "viewCount",
+                  sql.val(-2_147_483_648)
+                ),
+                direction: "desc",
+                key: "viewCount",
+                nullOrder: "NULLS LAST",
+              },
+              { expression: "id", direction: "asc" },
+            ],
+            parseCursor: z.object({
+              id: z.coerce.number().int(),
+              viewCount: z.preprocess((val) => {
+                if (val === null) return null;
+                return val;
+              }, z.coerce.number().nullable()),
+            }),
+          });
+
+          expect(firstPage.hasNextPage).toBe(true);
+          expect(firstPage.hasPrevPage).toBe(undefined);
+          expect(firstPage.rows[0]?.id).toEqual(posts[1]?.id);
+          expect(firstPage.rows[1]?.id).toEqual(posts[0]?.id);
+
+          const secondPage = await executeWithCursorPagination(query, {
+            perPage: 3,
+            after: firstPage.endCursor,
+            fields: [
+              {
+                expression: db.fn.coalesce(
+                  "viewCount",
+                  sql.val(-2_147_483_648)
+                ),
+                direction: "desc",
+                key: "viewCount",
+                nullOrder: "NULLS LAST",
+              },
+              { expression: "id", direction: "asc" },
+            ],
+            parseCursor: z.object({
+              id: z.coerce.number().int(),
+              viewCount: z.preprocess((val) => {
+                if (val === null) return null;
+                return val;
+              }, z.coerce.number().nullable()),
+            }),
+          });
+
+          expect(secondPage.hasNextPage).toBe(false);
+          expect(secondPage.hasPrevPage).toBe(undefined);
+          expect(secondPage.rows[0]?.id).toEqual(posts[2]?.id);
+          expect(secondPage.rows[1]?.id).toEqual(posts[3]?.id);
+        });
+      }
+    );
   });
 });
 

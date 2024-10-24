@@ -9,6 +9,7 @@ interface BlogPost {
   title: string;
   body: string;
   authorId: number;
+  viewCount?: number | null;
 }
 
 interface Author {
@@ -70,6 +71,7 @@ export async function createSampleBlogPosts(
     title: `Blog Post ${i}`,
     body: faker.lorem.paragraphs(10),
     authorId: i % 2,
+    viewCount: i <= 1 ? i * 100 : null,
   }));
 
   await db.insertInto("blogPosts").values(posts).execute();
@@ -96,6 +98,7 @@ export async function setupDatabase(db: Kysely<DB>) {
     .addColumn("title", "varchar(255)", (col) => col.notNull())
     .addColumn("body", "text", (col) => col.notNull())
     .addColumn("authorId", "integer", (col) => col.notNull())
+    .addColumn("viewCount", "integer")
     .execute();
   await db.schema
     .createIndex("blogPosts_authorId_index")
