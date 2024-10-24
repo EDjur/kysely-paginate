@@ -323,7 +323,7 @@ export function defaultDecodeCursor<
   try {
     parsed = [
       ...new URLSearchParams(
-        Buffer.from(cursor, "base64url").toString("utf8")
+        Buffer.from(cursor, "base64url").toString("utf8"),
       ).entries(),
     ];
   } catch {
