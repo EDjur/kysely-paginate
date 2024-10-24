@@ -279,21 +279,21 @@ export function defaultEncodeCursor<
   const cursor = new URLSearchParams();
 
   for (const [key, value] of values) {
-    switch (true) {
-      case value === null: {
-        cursor.set(key, "null");
-        break;
-      }
-      case typeof value === "string":
+    switch (typeof value) {
+      case "string":
         cursor.set(key, value);
         break;
 
-      case typeof value === "number":
-      case typeof value === "bigint":
+      case "number":
+      case "bigint":
         cursor.set(key, value.toString(10));
         break;
 
-      case typeof value === "object": {
+      case "object": {
+        if (value === null) {
+          cursor.set(key, "null")
+          break;
+        }
         if (value instanceof Date) {
           cursor.set(key, value.toISOString());
           break;
