@@ -77,7 +77,7 @@ export type CursorDecoder<
   T extends Fields<DB, TB, O>,
 > = (
   cursor: string,
-  fields: FieldNames<DB, TB, O, T>
+  fields: FieldNames<DB, TB, O, T>,
 ) => DecodedCursor<DB, TB, O, T>;
 
 type ParsedCursorValues<
@@ -139,7 +139,7 @@ export async function executeWithCursorPagination<
     parseCursor:
       | CursorParser<DB, TB, O, TFields>
       | { parse: CursorParser<DB, TB, O, TFields> };
-  }
+  },
 ): Promise<CursorPaginationResult<O, TCursorKey>> {
   const encodeCursor = opts.encodeCursor ?? defaultEncodeCursor;
   const decodeCursor = opts.decodeCursor ?? defaultDecodeCursor;
@@ -184,7 +184,7 @@ export async function executeWithCursorPagination<
   function applyCursor(
     qb: SelectQueryBuilder<DB, TB, O>,
     encoded: string,
-    defaultDirection: "asc" | "desc"
+    defaultDirection: "asc" | "desc",
   ) {
     const decoded = decodeCursor(encoded, fieldNames);
     const cursor = parseCursor(decoded);
@@ -316,7 +316,7 @@ export function defaultDecodeCursor<
   T extends Fields<DB, TB, O>,
 >(
   cursor: string,
-  fields: FieldNames<DB, TB, O, T>
+  fields: FieldNames<DB, TB, O, T>,
 ): DecodedCursor<DB, TB, O, T> {
   let parsed;
 
