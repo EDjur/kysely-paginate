@@ -488,7 +488,7 @@ databases.forEach(([kind, db]) => {
             parseCursor: z.object({
               id: z.coerce.number().int(),
               viewCount: z.preprocess((val) => {
-                if (val === null) return null;
+                if (val === null || val === undefined) return null;
                 return val;
               }, z.coerce.number().nullable()),
             }),
@@ -515,7 +515,7 @@ databases.forEach(([kind, db]) => {
             parseCursor: z.object({
               id: z.coerce.number().int(),
               viewCount: z.preprocess((val) => {
-                if (val === null) return null;
+                if (val === null || val === undefined) return null;
                 return val;
               }, z.coerce.number().nullable()),
             }),
@@ -547,7 +547,7 @@ databases.forEach(([kind, db]) => {
             parseCursor: z.object({
               id: z.coerce.number().int(),
               viewCount: z.preprocess((val) => {
-                if (val === null) return null;
+                if (val === null || val === undefined) return null;
                 return val;
               }, z.coerce.number().nullable()),
             }),
@@ -573,7 +573,7 @@ databases.forEach(([kind, db]) => {
             parseCursor: z.object({
               id: z.coerce.number().int(),
               viewCount: z.preprocess((val) => {
-                if (val === null) return null;
+                if (val === null || val === undefined) return null;
                 return val;
               }, z.coerce.number().nullable()),
             }),
@@ -613,7 +613,7 @@ databases.forEach(([kind, db]) => {
             parseCursor: z.object({
               id: z.coerce.number().int(),
               viewCount: z.preprocess((val) => {
-                if (val === null) return null;
+                if (val === null || val === undefined) return null;
                 return val;
               }, z.coerce.number().nullable()),
             }),
@@ -639,7 +639,7 @@ databases.forEach(([kind, db]) => {
             parseCursor: z.object({
               id: z.coerce.number().int(),
               viewCount: z.preprocess((val) => {
-                if (val === null) return null;
+                if (val === null || val === undefined) return null;
                 return val;
               }, z.coerce.number().nullable()),
             }),
@@ -674,7 +674,7 @@ databases.forEach(([kind, db]) => {
             parseCursor: z.object({
               id: z.coerce.number().int(),
               viewCount: z.preprocess((val) => {
-                if (val === null) return null;
+                if (val === null || val === undefined) return null;
                 return val;
               }, z.coerce.number().nullable()),
             }),
@@ -700,7 +700,7 @@ databases.forEach(([kind, db]) => {
             parseCursor: z.object({
               id: z.coerce.number().int(),
               viewCount: z.preprocess((val) => {
-                if (val === null) return null;
+                if (val === null || val === undefined) return null;
                 return val;
               }, z.coerce.number().nullable()),
             }),
