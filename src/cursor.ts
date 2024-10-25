@@ -394,8 +394,7 @@ export function defaultDecodeCursor<
       throw new Error("Unexpected field name");
     }
 
-    const [_fieldName, value] = field;
-    if (value === "null") {
+    if (field[1] === "null") {
       field[1] = null;
     }
   }
