@@ -6,23 +6,43 @@ import {
   sql,
 } from "kysely";
 
-type NullOrder = "NULLS LAST" | "NULLS FIRST";
+declare const SIMPLE_COLUMN_DATA_TYPES: readonly [
+  "varchar",
+  "char",
+  "text",
+  "integer",
+  "boolean",
+  "double precision",
+  "decimal",
+  "numeric",
+  "date",
+  "datetime",
+  "time",
+  "timetz",
+  "timestamp",
+  "timestamptz",
+];
+type SimpleColumnDataType = (typeof SIMPLE_COLUMN_DATA_TYPES)[number];
+
+type RequireNullableAndDataType<T> = T &
+  (
+    | { nullable?: never; dataType?: never }
+    | { nullable: boolean; dataType: SimpleColumnDataType }
+  );
 
 type SortField<DB, TB extends keyof DB, O> =
-  | {
+  | RequireNullableAndDataType<{
       expression:
         | (StringReference<DB, TB> & keyof O & string)
         | (StringReference<DB, TB> & `${string}.${keyof O & string}`);
       direction: OrderByDirectionExpression;
       key?: keyof O & string;
-      nullOrder?: NullOrder;
-    }
-  | {
+    }>
+  | RequireNullableAndDataType<{
       expression: ReferenceExpression<DB, TB>;
       direction: OrderByDirectionExpression;
       key: keyof O & string;
-      nullOrder?: NullOrder;
-    };
+    }>;
 
 type ExtractSortFieldKey<
   DB,
@@ -181,6 +201,8 @@ export async function executeWithCursorPagination<
     TFields
   >;
 
+  const reversed = !!opts.before && !opts.after;
+
   function applyCursor(
     qb: SelectQueryBuilder<DB, TB, O>,
     encoded: string,
@@ -189,7 +211,7 @@ export async function executeWithCursorPagination<
     const decoded = decodeCursor(encoded, fieldNames);
     const cursor = parseCursor(decoded);
 
-    return qb.where(({ and, or, eb }) => {
+    return qb.where(({ and, or, eb, fn, cast }) => {
       let expression;
 
       for (let i = fields.length - 1; i >= 0; --i) {
@@ -199,7 +221,36 @@ export async function executeWithCursorPagination<
         const comparison = field.direction === defaultDirection ? ">" : "<";
         const value = cursor[field.key as keyof typeof cursor];
 
-        const conditions = [eb(field.expression, comparison, value)];
+        let conditions = [eb(field.expression, comparison, value)];
+        if (field.nullable && field.dataType) {
+          const boundaryValue = getBoundaryValue(
+            field.direction,
+            field.dataType
+          );
+          if (reversed) {
+            conditions = [
+              eb(
+                field.expression,
+                comparison,
+                fn.coalesce(
+                  sql.val(value),
+                  cast(sql.val(boundaryValue), field.dataType)
+                )
+              ),
+            ];
+          } else {
+            conditions = [
+              eb(
+                fn.coalesce(
+                  field.expression,
+                  cast(sql.val(boundaryValue), field.dataType)
+                ),
+                comparison,
+                value
+              ),
+            ];
+          }
+        }
 
         if (expression) {
           const sign = value === null ? "is" : "=";
@@ -220,16 +271,13 @@ export async function executeWithCursorPagination<
   if (opts.after) qb = applyCursor(qb, opts.after, "asc");
   if (opts.before) qb = applyCursor(qb, opts.before, "desc");
 
-  const reversed = !!opts.before && !opts.after;
-
-  for (const { expression, direction, nullOrder } of fields) {
+  const nullOrder = opts.before ? "FIRST" : "LAST";
+  for (const { expression, direction, nullable } of fields) {
     let dir = reversed ? (direction === "asc" ? "desc" : "asc") : direction;
 
-    if (nullOrder === "NULLS LAST") {
-      dir = sql`${sql.raw(String(dir))} NULLS LAST`;
-    } else if (nullOrder === "NULLS FIRST") {
-      dir = sql`${sql.raw(String(dir))} NULLS FIRST`;
-    }
+    dir = nullable
+      ? sql`${sql.raw(String(dir))} NULLS ${sql.raw(nullOrder)}`
+      : dir;
 
     qb = qb.orderBy(expression, dir);
   }
@@ -291,7 +339,7 @@ export function defaultEncodeCursor<
 
       case "object": {
         if (value === null) {
-          cursor.set(key, "null")
+          cursor.set(key, "null");
           break;
         }
         if (value instanceof Date) {
@@ -353,4 +401,32 @@ export function defaultDecodeCursor<
   }
 
   return Object.fromEntries(parsed) as DecodedCursor<DB, TB, O, T>;
+}
+
+const minMaxValues: Record<SimpleColumnDataType, { min: any; max: any }> = {
+  varchar: { min: "", max: "\uffff" },
+  char: { min: "", max: "\uffff" },
+  text: { min: "", max: "\uffff" },
+  integer: { min: -2147483648, max: 2147483647 },
+  boolean: { min: false, max: true },
+  "double precision": { min: -1.7e308, max: 1.7e308 },
+  decimal: { min: "-Infinity", max: "Infinity" },
+  numeric: { min: "-Infinity", max: "Infinity" },
+  date: { min: "0001-01-01", max: "9999-12-31" },
+  datetime: { min: "0001-01-01 00:00:00", max: "9999-12-31 23:59:59" },
+  time: { min: "00:00:00", max: "23:59:59" },
+  timetz: { min: "00:00:00+00", max: "23:59:59+14" },
+  timestamp: { min: "0001-01-01 00:00:00", max: "9999-12-31 23:59:59" },
+  timestamptz: { min: "0001-01-01 00:00:00+00", max: "9999-12-31 23:59:59+00" },
+};
+
+function getBoundaryValue(
+  order: OrderByDirectionExpression,
+  dataType: SimpleColumnDataType
+) {
+  const direction = order === "asc" ? "max" : "min";
+  if (minMaxValues[dataType]) {
+    return minMaxValues[dataType][direction];
+  }
+  throw new Error(`Unsupported dataType: ${dataType}`);
 }

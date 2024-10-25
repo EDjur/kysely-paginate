@@ -2,12 +2,11 @@
 
 import { beforeAll, beforeEach, describe, expect, it, test } from "vitest";
 import { z } from "zod";
-import { sql } from "kysely";
 import {
-  defaultDecodeCursor,
   defaultEncodeCursor,
+  defaultDecodeCursor,
   executeWithCursorPagination,
-} from "../src";
+} from "../src/cursor";
 import {
   createSampleAuthors,
   createSampleBlogPosts,
@@ -481,13 +480,17 @@ databases.forEach(([kind, db]) => {
               {
                 expression: "viewCount",
                 direction: "desc",
-                nullOrder: "NULLS LAST",
+                nullable: true,
+                dataType: "integer",
               },
               { expression: "id", direction: "asc" },
             ],
             parseCursor: z.object({
               id: z.coerce.number().int(),
-              viewCount: z.number().nullable(),
+              viewCount: z.preprocess((val) => {
+                if (val === null) return null;
+                return val;
+              }, z.coerce.number().nullable()),
             }),
           });
 
@@ -501,7 +504,12 @@ databases.forEach(([kind, db]) => {
             perPage: 3,
             after: firstPage.endCursor,
             fields: [
-              { expression: "viewCount", direction: "desc" },
+              {
+                expression: "viewCount",
+                direction: "desc",
+                nullable: true,
+                dataType: "integer",
+              },
               { expression: "id", direction: "asc" },
             ],
             parseCursor: z.object({
@@ -529,13 +537,10 @@ databases.forEach(([kind, db]) => {
             perPage: 2,
             fields: [
               {
-                expression: db.fn.coalesce(
-                  "viewCount",
-                  sql.val(-2_147_483_648)
-                ),
+                expression: "viewCount",
                 direction: "desc",
-                key: "viewCount",
-                nullOrder: "NULLS LAST",
+                nullable: true,
+                dataType: "integer",
               },
               { expression: "id", direction: "asc" },
             ],
@@ -558,13 +563,10 @@ databases.forEach(([kind, db]) => {
             after: firstPage.endCursor,
             fields: [
               {
-                expression: db.fn.coalesce(
-                  "viewCount",
-                  sql.val(-2_147_483_648)
-                ),
+                expression: "viewCount",
                 direction: "desc",
-                key: "viewCount",
-                nullOrder: "NULLS LAST",
+                nullable: true,
+                dataType: "integer",
               },
               { expression: "id", direction: "asc" },
             ],
@@ -581,6 +583,133 @@ databases.forEach(([kind, db]) => {
           expect(secondPage.hasPrevPage).toBe(undefined);
           expect(secondPage.rows[0]?.id).toEqual(posts[2]?.id);
           expect(secondPage.rows[1]?.id).toEqual(posts[3]?.id);
+        });
+      }
+    );
+
+    describe.skipIf(kind === "mysql")(
+      "when providing a 'before' cursor (with nullable)",
+      () => {
+        it("works correctly with a multiple sorts and a nullable field", async () => {
+          const posts = await createSampleBlogPosts(db, 4);
+
+          const query = db.selectFrom("blogPosts").select(["id", "viewCount"]);
+
+          const firstPage = await executeWithCursorPagination(query, {
+            perPage: 2,
+            before: defaultEncodeCursor<any, any, any, any>([
+              ["viewCount", null],
+              ["id", 1000000],
+            ]),
+            fields: [
+              {
+                expression: "viewCount",
+                direction: "desc",
+                nullable: true,
+                dataType: "integer",
+              },
+              { expression: "id", direction: "asc" },
+            ],
+            parseCursor: z.object({
+              id: z.coerce.number().int(),
+              viewCount: z.preprocess((val) => {
+                if (val === null) return null;
+                return val;
+              }, z.coerce.number().nullable()),
+            }),
+          });
+
+          expect(firstPage.hasNextPage).toBe(undefined);
+          expect(firstPage.hasPrevPage).toBe(true);
+          expect(firstPage.rows[0]?.id).toEqual(posts[2]?.id);
+          expect(firstPage.rows[1]?.id).toEqual(posts[3]?.id);
+
+          const secondPage = await executeWithCursorPagination(query, {
+            perPage: 2,
+            before: firstPage.startCursor,
+            fields: [
+              {
+                expression: "viewCount",
+                direction: "desc",
+                nullable: true,
+                dataType: "integer",
+              },
+              { expression: "id", direction: "asc" },
+            ],
+            parseCursor: z.object({
+              id: z.coerce.number().int(),
+              viewCount: z.preprocess((val) => {
+                if (val === null) return null;
+                return val;
+              }, z.coerce.number().nullable()),
+            }),
+          });
+
+          expect(secondPage.hasNextPage).toBe(undefined);
+          expect(secondPage.hasPrevPage).toBe(false);
+          expect(secondPage.rows[0]?.id).toEqual(posts[1]?.id);
+          expect(secondPage.rows[1]?.id).toEqual(posts[0]?.id);
+        });
+
+        it("works correctly with a multiple sorts, a nullable field, and non-null cursor", async () => {
+          const posts = await createSampleBlogPosts(db, 4);
+
+          const query = db.selectFrom("blogPosts").select(["id", "viewCount"]);
+
+          const firstPage = await executeWithCursorPagination(query, {
+            perPage: 2,
+            before: defaultEncodeCursor<any, any, any, any>([
+              ["viewCount", null],
+              ["id", 1000000],
+            ]),
+            fields: [
+              {
+                expression: "viewCount",
+                direction: "desc",
+                nullable: true,
+                dataType: "integer",
+              },
+              { expression: "id", direction: "asc" },
+            ],
+            parseCursor: z.object({
+              id: z.coerce.number().int(),
+              viewCount: z.preprocess((val) => {
+                if (val === null) return null;
+                return val;
+              }, z.coerce.number().nullable()),
+            }),
+          });
+
+          expect(firstPage.hasNextPage).toBe(undefined);
+          expect(firstPage.hasPrevPage).toBe(true);
+          expect(firstPage.rows[0]?.id).toEqual(posts[2]?.id);
+          expect(firstPage.rows[1]?.id).toEqual(posts[3]?.id);
+
+          const secondPage = await executeWithCursorPagination(query, {
+            perPage: 2,
+            before: firstPage.startCursor,
+            fields: [
+              {
+                expression: "viewCount",
+                direction: "desc",
+                nullable: true,
+                dataType: "integer",
+              },
+              { expression: "id", direction: "asc" },
+            ],
+            parseCursor: z.object({
+              id: z.coerce.number().int(),
+              viewCount: z.preprocess((val) => {
+                if (val === null) return null;
+                return val;
+              }, z.coerce.number().nullable()),
+            }),
+          });
+
+          expect(secondPage.hasNextPage).toBe(undefined);
+          expect(secondPage.hasPrevPage).toBe(false);
+          expect(secondPage.rows[0]?.id).toEqual(posts[1]?.id);
+          expect(secondPage.rows[1]?.id).toEqual(posts[0]?.id);
         });
       }
     );
