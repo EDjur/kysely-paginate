@@ -3,10 +3,10 @@
 import { beforeAll, beforeEach, describe, expect, it, test } from "vitest";
 import { z } from "zod";
 import {
-  defaultEncodeCursor,
   defaultDecodeCursor,
+  defaultEncodeCursor,
   executeWithCursorPagination,
-} from "../src/cursor";
+} from "../src";
 import {
   createSampleAuthors,
   createSampleBlogPosts,
