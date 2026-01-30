@@ -1,5 +1,5 @@
 {
-  "name": "kysely-paginate-nullable",
+  "name": "@edjur/kysely-paginate",
   "version": "1.0.0",
   "description": "Pagination helpers for use with kysely (FORK)",
   "repository": {
