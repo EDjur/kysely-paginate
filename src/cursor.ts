@@ -6,7 +6,7 @@ import {
   sql,
 } from "kysely";
 
-declare const SIMPLE_COLUMN_DATA_TYPES: readonly [
+export const SIMPLE_COLUMN_DATA_TYPES = [
   "varchar",
   "char",
   "text",
@@ -21,8 +21,8 @@ declare const SIMPLE_COLUMN_DATA_TYPES: readonly [
   "timetz",
   "timestamp",
   "timestamptz",
-];
-type SimpleColumnDataType = (typeof SIMPLE_COLUMN_DATA_TYPES)[number];
+] as const;
+export type SimpleColumnDataType = (typeof SIMPLE_COLUMN_DATA_TYPES)[number];
 
 type RequireNullableAndDataType<T> = T &
   (
@@ -30,7 +30,7 @@ type RequireNullableAndDataType<T> = T &
     | { nullable: boolean; dataType: SimpleColumnDataType }
   );
 
-type SortField<DB, TB extends keyof DB, O> =
+export type SortField<DB, TB extends keyof DB, O> =
   | RequireNullableAndDataType<{
       expression:
         | (StringReference<DB, TB> & keyof O & string)
@@ -59,7 +59,7 @@ type ExtractSortFieldKey<
         : never
       : never;
 
-type Fields<DB, TB extends keyof DB, O> = ReadonlyArray<
+export type Fields<DB, TB extends keyof DB, O> = ReadonlyArray<
   Readonly<SortField<DB, TB, O>>
 >;
 
