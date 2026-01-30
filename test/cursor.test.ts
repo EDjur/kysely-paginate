@@ -1,6 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
-import { beforeAll, beforeEach, describe, expect, it, test } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
   defaultDecodeCursor,
@@ -584,7 +582,7 @@ databases.forEach(([kind, db]) => {
           expect(secondPage.rows[0]?.id).toEqual(posts[2]?.id);
           expect(secondPage.rows[1]?.id).toEqual(posts[3]?.id);
         });
-      }
+      },
     );
 
     describe.skipIf(kind === "mysql")(
@@ -711,7 +709,7 @@ databases.forEach(([kind, db]) => {
           expect(secondPage.rows[0]?.id).toEqual(posts[1]?.id);
           expect(secondPage.rows[1]?.id).toEqual(posts[0]?.id);
         });
-      }
+      },
     );
   });
 });

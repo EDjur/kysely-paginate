@@ -1,12 +1,12 @@
 {
-  "name": "kysely-paginate",
-  "version": "0.3.1",
-  "description": "Pagination helpers for use with kysely",
+  "name": "kysely-paginate-nullable",
+  "version": "1.0.0",
+  "description": "Pagination helpers for use with kysely (FORK)",
   "repository": {
     "type": "git",
-    "url": "git://github.com/charlie-hadden/kysely-paginate.git"
+    "url": "git://github.com/EDjur/kysely-paginate.git"
   },
-  "author": "Charlie Hadden <charlie@hadden.me>",
+  "author": "Elias Djurfeldt <eliasdjurfeldt@gmail.com>",
   "license": "MIT",
   "engines": {
     "node": ">= 16.14.0"
@@ -30,31 +30,34 @@
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --clean",
     "release": "pnpm run build && pnpm changeset publish",
+    "publish": "npm publish --access public",
     "bench": "vitest bench",
     "lint": "eslint .",
-    "test": "vitest --no-threads",
+    "test": "vitest",
     "type-check": "tsc --noEmit"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.26.2",
-    "@faker-js/faker": "^8.3.1",
-    "@types/better-sqlite3": "^7.6.7",
+    "@changesets/cli": "^2.29.8",
+    "@eslint/js": "^9.39.2",
+    "@faker-js/faker": "^10.2.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.1.0",
-    "@types/pg": "^8.10.9",
-    "@typescript-eslint/eslint-plugin": "^6.12.0",
-    "@typescript-eslint/parser": "^6.12.0",
-    "better-sqlite3": "^9.1.1",
-    "eslint": "^8.54.0",
-    "eslint-config-prettier": "^9.0.0",
-    "eslint-plugin-prettier": "^5.0.1",
-    "kysely": "^0.27.4",
-    "mysql2": "^3.6.4",
-    "pg": "^8.11.3",
-    "prettier": "^3.1.0",
-    "tsup": "^8.0.1",
-    "typescript": "^5.3.2",
-    "vitest": "0.34.6",
-    "zod": "^3.22.4"
+    "@types/pg": "^8.16.0",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "better-sqlite3": "^12.6.2",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "kysely": "^0.28.10",
+    "mysql2": "^3.16.2",
+    "pg": "^8.17.2",
+    "prettier": "^3.8.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.54.0",
+    "vitest": "^4.0.18",
+    "zod": "^4.3.6"
   },
   "peerDependencies": {
     "kysely": "*"
