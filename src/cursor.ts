@@ -1,12 +1,13 @@
 import {
-  OrderByDirectionExpression,
+  type OrderByDirection,
+  type OrderByItemBuilder,
   ReferenceExpression,
   SelectQueryBuilder,
   StringReference,
   sql,
 } from "kysely";
 
-declare const SIMPLE_COLUMN_DATA_TYPES: readonly [
+export const SIMPLE_COLUMN_DATA_TYPES = [
   "varchar",
   "char",
   "text",
@@ -21,8 +22,8 @@ declare const SIMPLE_COLUMN_DATA_TYPES: readonly [
   "timetz",
   "timestamp",
   "timestamptz",
-];
-type SimpleColumnDataType = (typeof SIMPLE_COLUMN_DATA_TYPES)[number];
+] as const;
+export type SimpleColumnDataType = (typeof SIMPLE_COLUMN_DATA_TYPES)[number];
 
 type RequireNullableAndDataType<T> = T &
   (
@@ -30,17 +31,17 @@ type RequireNullableAndDataType<T> = T &
     | { nullable: boolean; dataType: SimpleColumnDataType }
   );
 
-type SortField<DB, TB extends keyof DB, O> =
+export type SortField<DB, TB extends keyof DB, O> =
   | RequireNullableAndDataType<{
       expression:
         | (StringReference<DB, TB> & keyof O & string)
         | (StringReference<DB, TB> & `${string}.${keyof O & string}`);
-      direction: OrderByDirectionExpression;
+      direction: OrderByDirection;
       key?: keyof O & string;
     }>
   | RequireNullableAndDataType<{
       expression: ReferenceExpression<DB, TB>;
-      direction: OrderByDirectionExpression;
+      direction: OrderByDirection;
       key: keyof O & string;
     }>;
 
@@ -59,7 +60,7 @@ type ExtractSortFieldKey<
         : never
       : never;
 
-type Fields<DB, TB extends keyof DB, O> = ReadonlyArray<
+export type Fields<DB, TB extends keyof DB, O> = ReadonlyArray<
   Readonly<SortField<DB, TB, O>>
 >;
 
@@ -215,7 +216,6 @@ export async function executeWithCursorPagination<
       let expression;
 
       for (let i = fields.length - 1; i >= 0; --i) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const field = fields[i]!;
 
         const comparison = field.direction === defaultDirection ? ">" : "<";
@@ -225,7 +225,7 @@ export async function executeWithCursorPagination<
         if (field.nullable && field.dataType) {
           const boundaryValue = getBoundaryValue(
             field.direction,
-            field.dataType
+            field.dataType,
           );
           if (reversed) {
             conditions = [
@@ -234,8 +234,8 @@ export async function executeWithCursorPagination<
                 comparison,
                 fn.coalesce(
                   sql.val(value),
-                  cast(sql.val(boundaryValue), field.dataType)
-                )
+                  cast(sql.val(boundaryValue), field.dataType),
+                ),
               ),
             ];
           } else {
@@ -243,10 +243,10 @@ export async function executeWithCursorPagination<
               eb(
                 fn.coalesce(
                   field.expression,
-                  cast(sql.val(boundaryValue), field.dataType)
+                  cast(sql.val(boundaryValue), field.dataType),
                 ),
                 comparison,
-                value
+                value,
               ),
             ];
           }
@@ -271,15 +271,23 @@ export async function executeWithCursorPagination<
   if (opts.after) qb = applyCursor(qb, opts.after, "asc");
   if (opts.before) qb = applyCursor(qb, opts.before, "desc");
 
-  const nullOrder = opts.before ? "FIRST" : "LAST";
+  const nullsPosition = opts.before ? "first" : "last";
   for (const { expression, direction, nullable } of fields) {
-    let dir = reversed ? (direction === "asc" ? "desc" : "asc") : direction;
+    const dir = reversed ? (direction === "asc" ? "desc" : "asc") : direction;
 
-    dir = nullable
-      ? sql`${sql.raw(String(dir))} NULLS ${sql.raw(nullOrder)}`
-      : dir;
-
-    qb = qb.orderBy(expression, dir);
+    if (nullable) {
+      qb = qb.orderBy(expression, (ob: OrderByItemBuilder) =>
+        dir === "asc"
+          ? nullsPosition === "first"
+            ? ob.asc().nullsFirst()
+            : ob.asc().nullsLast()
+          : nullsPosition === "first"
+            ? ob.desc().nullsFirst()
+            : ob.desc().nullsLast(),
+      );
+    } else {
+      qb = qb.orderBy(expression, dir);
+    }
   }
 
   const rows = await qb.limit(opts.perPage + 1).execute();
@@ -309,7 +317,7 @@ export async function executeWithCursorPagination<
         const cursorKey =
           typeof opts.cursorPerRow === "string" ? opts.cursorPerRow : "$cursor";
 
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         (row as any)[cursorKey] = generateCursor(row);
       }
 
@@ -420,8 +428,8 @@ const minMaxValues: Record<SimpleColumnDataType, { min: any; max: any }> = {
 };
 
 function getBoundaryValue(
-  order: OrderByDirectionExpression,
-  dataType: SimpleColumnDataType
+  order: OrderByDirection,
+  dataType: SimpleColumnDataType,
 ) {
   const direction = order === "asc" ? "max" : "min";
   if (minMaxValues[dataType]) {
