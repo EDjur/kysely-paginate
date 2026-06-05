@@ -7,7 +7,7 @@ type RequireNullableAndDataType<T> = T & ({
     dataType?: never;
 } | {
     nullable: boolean;
-    dataType: SimpleColumnDataType;
+    dataType?: SimpleColumnDataType;
 });
 type SortField<DB, TB extends keyof DB, O> = RequireNullableAndDataType<{
     expression: (StringReference<DB, TB> & keyof O & string) | (StringReference<DB, TB> & `${string}.${keyof O & string}`);
@@ -60,6 +60,17 @@ declare function executeWithCursorPagination<DB, TB extends keyof DB, O, const T
         parse: CursorParser<DB, TB, O, TFields>;
     };
 }): Promise<CursorPaginationResult<O, TCursorKey>>;
+/**
+ * Build a cursor encoder bound to a set of sort fields. The returned function
+ * encodes one row's cursor — the exact value {@link executeWithCursorPagination}
+ * produces for that row. Useful for "find the page containing row X" lookups:
+ * scan ids in sort order, locate the anchor, then encode just that single row
+ * instead of paying `cursorPerRow`'s per-row encode across the whole scan.
+ */
+declare function getCursorEncoder<DB, TB extends keyof DB, O, const TFields extends Fields<DB, TB, O> = Fields<DB, TB, O>>(opts: {
+    fields: TFields;
+    encodeCursor?: CursorEncoder<DB, TB, O, TFields>;
+}): (row: O) => string;
 declare function defaultEncodeCursor<DB, TB extends keyof DB, O, T extends Fields<DB, TB, O>>(values: EncodeCursorValues<DB, TB, O, T>): string;
 declare function defaultDecodeCursor<DB, TB extends keyof DB, O, T extends Fields<DB, TB, O>>(cursor: string, fields: FieldNames<DB, TB, O, T>): DecodedCursor<DB, TB, O, T>;
 
@@ -74,4 +85,4 @@ declare function executeWithOffsetPagination<O, DB, TB extends keyof DB>(qb: Sel
     experimental_deferredJoinPrimaryKey?: StringReference<DB, TB>;
 }): Promise<OffsetPaginationResult<O>>;
 
-export { type CursorDecoder, type CursorEncoder, type CursorPaginationResult, type CursorParser, type Fields, type OffsetPaginationResult, SIMPLE_COLUMN_DATA_TYPES, type SimpleColumnDataType, type SortField, defaultDecodeCursor, defaultEncodeCursor, executeWithCursorPagination, executeWithOffsetPagination };
+export { type CursorDecoder, type CursorEncoder, type CursorPaginationResult, type CursorParser, type Fields, type OffsetPaginationResult, SIMPLE_COLUMN_DATA_TYPES, type SimpleColumnDataType, type SortField, defaultDecodeCursor, defaultEncodeCursor, executeWithCursorPagination, executeWithOffsetPagination, getCursorEncoder };
