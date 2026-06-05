@@ -24,7 +24,8 @@ __export(index_exports, {
   defaultDecodeCursor: () => defaultDecodeCursor,
   defaultEncodeCursor: () => defaultEncodeCursor,
   executeWithCursorPagination: () => executeWithCursorPagination,
-  executeWithOffsetPagination: () => executeWithOffsetPagination
+  executeWithOffsetPagination: () => executeWithOffsetPagination,
+  getCursorEncoder: () => getCursorEncoder
 });
 module.exports = __toCommonJS(index_exports);
 
@@ -46,72 +47,61 @@ var SIMPLE_COLUMN_DATA_TYPES = [
   "timestamp",
   "timestamptz"
 ];
+function resolveFieldKey(field) {
+  if (field.key) {
+    return field.key;
+  }
+  if (typeof field.expression === "string") {
+    const parts = field.expression.split(".");
+    const key = parts[1] ?? parts[0];
+    if (key) {
+      return key;
+    }
+  }
+  throw new Error("missing key");
+}
 async function executeWithCursorPagination(qb, opts) {
-  const encodeCursor = opts.encodeCursor ?? defaultEncodeCursor;
   const decodeCursor = opts.decodeCursor ?? defaultDecodeCursor;
   const parseCursor = typeof opts.parseCursor === "function" ? opts.parseCursor : opts.parseCursor.parse;
-  const fields = opts.fields.map((field) => {
-    let key = field.key;
-    if (!key && typeof field.expression === "string") {
-      const expressionParts = field.expression.split(".");
-      key = expressionParts[1] ?? expressionParts[0];
-    }
-    if (!key) throw new Error("missing key");
-    return { ...field, key };
+  const fields = opts.fields.map((field) => ({
+    ...field,
+    key: resolveFieldKey(field)
+  }));
+  const generateCursor = getCursorEncoder({
+    encodeCursor: opts.encodeCursor,
+    fields: opts.fields
   });
-  function generateCursor(row) {
-    const cursorFieldValues = fields.map(({ key }) => [
-      key,
-      row[key]
-    ]);
-    return encodeCursor(cursorFieldValues);
-  }
   const fieldNames = fields.map((field) => field.key);
   const reversed = !!opts.before && !opts.after;
   function applyCursor(qb2, encoded, defaultDirection) {
     const decoded = decodeCursor(encoded, fieldNames);
     const cursor = parseCursor(decoded);
-    return qb2.where(({ and, or, eb, fn, cast }) => {
+    return qb2.where(({ and, or, eb }) => {
       let expression;
       for (let i = fields.length - 1; i >= 0; --i) {
         const field = fields[i];
         const comparison = field.direction === defaultDirection ? ">" : "<";
         const value = cursor[field.key];
-        let conditions = [eb(field.expression, comparison, value)];
-        if (field.nullable && field.dataType) {
-          const boundaryValue = getBoundaryValue(
-            field.direction,
-            field.dataType
+        const conditions = [];
+        if (!field.nullable) {
+          conditions.push(eb(field.expression, comparison, value));
+        } else if (reversed) {
+          conditions.push(
+            value === null ? eb(field.expression, "is not", null) : eb(field.expression, comparison, value)
           );
-          if (reversed) {
-            conditions = [
-              eb(
-                field.expression,
-                comparison,
-                fn.coalesce(
-                  import_kysely.sql.val(value),
-                  cast(import_kysely.sql.val(boundaryValue), field.dataType)
-                )
-              )
-            ];
-          } else {
-            conditions = [
-              eb(
-                fn.coalesce(
-                  field.expression,
-                  cast(import_kysely.sql.val(boundaryValue), field.dataType)
-                ),
-                comparison,
-                value
-              )
-            ];
-          }
+        } else if (value !== null) {
+          conditions.push(
+            or([
+              eb(field.expression, comparison, value),
+              eb(field.expression, "is", null)
+            ])
+          );
         }
         if (expression) {
           const sign = value === null ? "is" : "=";
           conditions.push(and([eb(field.expression, sign, value), expression]));
         }
-        expression = or(conditions);
+        expression = conditions.length > 0 ? or(conditions) : eb(import_kysely.sql`1`, "=", 0);
       }
       if (!expression) {
         throw new Error("Error building cursor expression");
@@ -154,6 +144,19 @@ async function executeWithCursorPagination(qb, opts) {
       }
       return row;
     })
+  };
+}
+function getCursorEncoder(opts) {
+  const encodeCursor = opts.encodeCursor ?? defaultEncodeCursor;
+  const keys = opts.fields.map(
+    (field) => resolveFieldKey(field)
+  );
+  return (row) => {
+    const cursorFieldValues = keys.map((key) => [
+      key,
+      row[key]
+    ]);
+    return encodeCursor(cursorFieldValues);
   };
 }
 function defaultEncodeCursor(values) {
@@ -213,29 +216,6 @@ function defaultDecodeCursor(cursor, fields) {
   }
   return Object.fromEntries(parsed);
 }
-var minMaxValues = {
-  varchar: { min: "", max: "\uFFFF" },
-  char: { min: "", max: "\uFFFF" },
-  text: { min: "", max: "\uFFFF" },
-  integer: { min: -2147483648, max: 2147483647 },
-  boolean: { min: false, max: true },
-  "double precision": { min: -17e307, max: 17e307 },
-  decimal: { min: "-Infinity", max: "Infinity" },
-  numeric: { min: "-Infinity", max: "Infinity" },
-  date: { min: "0001-01-01", max: "9999-12-31" },
-  datetime: { min: "0001-01-01 00:00:00", max: "9999-12-31 23:59:59" },
-  time: { min: "00:00:00", max: "23:59:59" },
-  timetz: { min: "00:00:00+00", max: "23:59:59+14" },
-  timestamp: { min: "0001-01-01 00:00:00", max: "9999-12-31 23:59:59" },
-  timestamptz: { min: "0001-01-01 00:00:00+00", max: "9999-12-31 23:59:59+00" }
-};
-function getBoundaryValue(order, dataType) {
-  const direction = order === "asc" ? "max" : "min";
-  if (minMaxValues[dataType]) {
-    return minMaxValues[dataType][direction];
-  }
-  throw new Error(`Unsupported dataType: ${dataType}`);
-}
 
 // src/offset.ts
 var import_kysely2 = require("kysely");
@@ -266,5 +246,6 @@ async function executeWithOffsetPagination(qb, opts) {
   defaultDecodeCursor,
   defaultEncodeCursor,
   executeWithCursorPagination,
-  executeWithOffsetPagination
+  executeWithOffsetPagination,
+  getCursorEncoder
 });
