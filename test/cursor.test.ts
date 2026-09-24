@@ -42,6 +42,23 @@ databases.forEach(([kind, db]) => {
         );
       });
 
+      it("forwards executeOptions to the page query", async () => {
+        await createSampleBlogPosts(db, 2);
+
+        const query = db.selectFrom("blogPosts").select(["id"]);
+
+        // An already-aborted signal makes kysely throw before it runs any
+        // SQL, so this rejects only if the options reached `.execute()`.
+        await expect(
+          executeWithCursorPagination(query, {
+            perPage: 2,
+            fields: [{ expression: "id", direction: "asc" }],
+            parseCursor: z.object({ id: z.coerce.number().int() }),
+            executeOptions: { signal: AbortSignal.abort() },
+          }),
+        ).rejects.toThrowError(/abort/i);
+      });
+
       it("supports returning a cursor for each row", async () => {
         await createSampleBlogPosts(db, 1);
 
