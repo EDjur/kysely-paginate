@@ -94,7 +94,7 @@ async function executeWithCursorPagination(qb, opts) {
       qb = qb.orderBy(expression, dir);
     }
   }
-  const rows = await qb.limit(opts.perPage + 1).execute();
+  const rows = await qb.limit(opts.perPage + 1).execute(opts.executeOptions);
   const hasNextPage = reversed ? void 0 : rows.length > opts.perPage;
   const hasPrevPage = !reversed ? void 0 : rows.length > opts.perPage;
   if (rows.length > opts.perPage) rows.pop();
@@ -189,17 +189,19 @@ function defaultDecodeCursor(cursor, fields) {
 }
 
 // src/offset.ts
-import { sql as sql2 } from "kysely";
+import {
+  sql as sql2
+} from "kysely";
 async function executeWithOffsetPagination(qb, opts) {
   qb = qb.limit(opts.perPage + 1).offset((opts.page - 1) * opts.perPage);
   const deferredJoinPrimaryKey = opts.experimental_deferredJoinPrimaryKey;
   if (deferredJoinPrimaryKey) {
-    const primaryKeys = await qb.clearSelect().select((eb) => eb.ref(deferredJoinPrimaryKey).as("primaryKey")).execute().then((rows2) => rows2.map((row) => row.primaryKey));
+    const primaryKeys = await qb.clearSelect().select((eb) => eb.ref(deferredJoinPrimaryKey).as("primaryKey")).execute(opts.executeOptions).then((rows2) => rows2.map((row) => row.primaryKey));
     qb = qb.where(
       (eb) => primaryKeys.length > 0 ? eb(deferredJoinPrimaryKey, "in", primaryKeys) : eb(sql2`1`, "=", 0)
     ).clearOffset().clearLimit();
   }
-  const rows = await qb.execute();
+  const rows = await qb.execute(opts.executeOptions);
   const hasNextPage = rows.length > 0 ? rows.length > opts.perPage : void 0;
   const hasPrevPage = rows.length > 0 ? opts.page > 1 : void 0;
   if (rows.length > opts.perPage) {

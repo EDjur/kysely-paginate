@@ -1,4 +1,4 @@
-import { StringReference, OrderByDirection, ReferenceExpression, SelectQueryBuilder } from 'kysely';
+import { StringReference, OrderByDirection, ReferenceExpression, SelectQueryBuilder, AbortableQueryOptions } from 'kysely';
 
 declare const SIMPLE_COLUMN_DATA_TYPES: readonly ["varchar", "char", "text", "integer", "boolean", "double precision", "decimal", "numeric", "date", "datetime", "time", "timetz", "timestamp", "timestamptz"];
 type SimpleColumnDataType = (typeof SIMPLE_COLUMN_DATA_TYPES)[number];
@@ -59,6 +59,11 @@ declare function executeWithCursorPagination<DB, TB extends keyof DB, O, const T
     parseCursor: CursorParser<DB, TB, O, TFields> | {
         parse: CursorParser<DB, TB, O, TFields>;
     };
+    /**
+     * Passed straight to `.execute()` on the page query, so a caller can hand
+     * it an `AbortSignal` and an inflight abort strategy.
+     */
+    executeOptions?: AbortableQueryOptions;
 }): Promise<CursorPaginationResult<O, TCursorKey>>;
 /**
  * Build a cursor encoder bound to a set of sort fields. The returned function
@@ -83,6 +88,11 @@ declare function executeWithOffsetPagination<O, DB, TB extends keyof DB>(qb: Sel
     perPage: number;
     page: number;
     experimental_deferredJoinPrimaryKey?: StringReference<DB, TB>;
+    /**
+     * Passed straight to `.execute()` on every statement this runs, so a
+     * caller can hand it an `AbortSignal` and an inflight abort strategy.
+     */
+    executeOptions?: AbortableQueryOptions;
 }): Promise<OffsetPaginationResult<O>>;
 
 export { type CursorDecoder, type CursorEncoder, type CursorPaginationResult, type CursorParser, type Fields, type OffsetPaginationResult, SIMPLE_COLUMN_DATA_TYPES, type SimpleColumnDataType, type SortField, defaultDecodeCursor, defaultEncodeCursor, executeWithCursorPagination, executeWithOffsetPagination, getCursorEncoder };
