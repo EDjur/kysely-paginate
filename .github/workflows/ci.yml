@@ -1,13 +1,20 @@
 name: CI
-on: [pull_request]
+on:
+  pull_request:
+    # `ready_for_review` is not a default activity type. Without it, a draft
+    # marked ready triggers no run at all, so nothing ever checks it.
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
   test:
+    # A draft installs and runs the whole toolchain for a branch nobody is
+    # reviewing yet. Marking the pull request ready runs it.
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        node-version: [16.x, 18.x, 20.x]
+        node-version: [22.x, 24.x]
 
     steps:
       - uses: actions/checkout@v3

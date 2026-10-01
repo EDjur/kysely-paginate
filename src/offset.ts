@@ -1,4 +1,9 @@
-import { SelectQueryBuilder, StringReference, sql } from "kysely";
+import {
+  type AbortableQueryOptions,
+  SelectQueryBuilder,
+  StringReference,
+  sql,
+} from "kysely";
 
 export type OffsetPaginationResult<O> = {
   hasNextPage?: boolean;
@@ -12,6 +17,11 @@ export async function executeWithOffsetPagination<O, DB, TB extends keyof DB>(
     perPage: number;
     page: number;
     experimental_deferredJoinPrimaryKey?: StringReference<DB, TB>;
+    /**
+     * Passed straight to `.execute()` on every statement this runs, so a
+     * caller can hand it an `AbortSignal` and an inflight abort strategy.
+     */
+    executeOptions?: AbortableQueryOptions;
   },
 ): Promise<OffsetPaginationResult<O>> {
   qb = qb.limit(opts.perPage + 1).offset((opts.page - 1) * opts.perPage);
@@ -22,7 +32,7 @@ export async function executeWithOffsetPagination<O, DB, TB extends keyof DB>(
     const primaryKeys = await qb
       .clearSelect()
       .select((eb) => eb.ref(deferredJoinPrimaryKey).as("primaryKey"))
-      .execute()
+      .execute(opts.executeOptions)
       // @ts-expect-error TODO: Fix the type here later
       .then((rows) => rows.map((row) => row.primaryKey));
 
@@ -36,7 +46,7 @@ export async function executeWithOffsetPagination<O, DB, TB extends keyof DB>(
       .clearLimit();
   }
 
-  const rows = await qb.execute();
+  const rows = await qb.execute(opts.executeOptions);
   const hasNextPage = rows.length > 0 ? rows.length > opts.perPage : undefined;
   const hasPrevPage = rows.length > 0 ? opts.page > 1 : undefined;
 

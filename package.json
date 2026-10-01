@@ -9,7 +9,7 @@
   "author": "Elias Djurfeldt <eliasdjurfeldt@gmail.com>",
   "license": "MIT",
   "engines": {
-    "node": ">= 16.14.0"
+    "node": ">= 22.0.0"
   },
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -49,7 +49,7 @@
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
-    "kysely": "^0.28.10",
+    "kysely": "^0.29.6",
     "mysql2": "^3.16.2",
     "pg": "^8.17.2",
     "prettier": "^3.8.1",
@@ -60,7 +60,7 @@
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "kysely": "*"
+    "kysely": ">=0.29.0"
   },
   "files": [
     "./dist"

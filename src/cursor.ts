@@ -1,4 +1,5 @@
 import {
+  type AbortableQueryOptions,
   type Expression,
   type OrderByDirection,
   type OrderByItemBuilder,
@@ -123,13 +124,15 @@ type CursorPaginationResultRow<
   TRow,
   TCursorKey extends string | boolean | undefined,
 > = TRow & {
-  [K in TCursorKey extends undefined
-    ? never
-    : TCursorKey extends false
+  [
+    K in TCursorKey extends undefined
       ? never
-      : TCursorKey extends true
-        ? "$cursor"
-        : TCursorKey]: string;
+      : TCursorKey extends false
+        ? never
+        : TCursorKey extends true
+          ? "$cursor"
+          : TCursorKey
+  ]: string;
 };
 
 export type CursorPaginationResult<
@@ -184,6 +187,11 @@ export async function executeWithCursorPagination<
     parseCursor:
       | CursorParser<DB, TB, O, TFields>
       | { parse: CursorParser<DB, TB, O, TFields> };
+    /**
+     * Passed straight to `.execute()` on the page query, so a caller can hand
+     * it an `AbortSignal` and an inflight abort strategy.
+     */
+    executeOptions?: AbortableQueryOptions;
   },
 ): Promise<CursorPaginationResult<O, TCursorKey>> {
   const decodeCursor = opts.decodeCursor ?? defaultDecodeCursor;
@@ -297,7 +305,7 @@ export async function executeWithCursorPagination<
     }
   }
 
-  const rows = await qb.limit(opts.perPage + 1).execute();
+  const rows = await qb.limit(opts.perPage + 1).execute(opts.executeOptions);
 
   const hasNextPage = reversed ? undefined : rows.length > opts.perPage;
   const hasPrevPage = !reversed ? undefined : rows.length > opts.perPage;
