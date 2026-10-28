@@ -64,5 +64,10 @@
   },
   "files": [
     "./dist"
-  ]
+  ],
+  "allowScripts": {
+    "better-sqlite3": false,
+    "esbuild": false,
+    "fsevents": false
+  }
 }
