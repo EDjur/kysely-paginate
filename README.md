@@ -23,6 +23,19 @@ const result = await executeWithCursorPagination(query, {
 });
 ```
 
+### Seeking the index on later pages
+
+Set `seek: true` on the leading sort field to bound it by the cursor value as
+well (`>=` or `<=`). The keyset `OR` already implies the bound, so results do
+not change, but Postgres can only use the bound as an index condition. A deep
+page then seeks to the cursor instead of scanning from the start of the order.
+`seek` is allowed only on the leading, non-nullable field.
+
+### Invalid cursors
+
+A cursor that cannot be decoded, names other fields, or that `parseCursor`
+refuses throws `InvalidCursorError`, with the original error as `cause`.
+
 ## Offset pagination
 ```ts
 const query = db

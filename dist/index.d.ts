@@ -13,11 +13,23 @@ type SortField<DB, TB extends keyof DB, O> = RequireNullableAndDataType<{
     expression: (StringReference<DB, TB> & keyof O & string) | (StringReference<DB, TB> & `${string}.${keyof O & string}`);
     direction: OrderByDirection;
     key?: keyof O & string;
+    seek?: boolean;
 }> | RequireNullableAndDataType<{
     expression: ReferenceExpression<DB, TB>;
     direction: OrderByDirection;
     key: keyof O & string;
+    seek?: boolean;
 }>;
+/**
+ * A cursor that cannot be read: not this library's encoding, written for
+ * other sort fields, or rejected by `parseCursor`. The original error, when
+ * there is one, is the `cause`. A caller can treat it as bad input.
+ */
+declare class InvalidCursorError extends Error {
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
+}
 type ExtractSortFieldKey<DB, TB extends keyof DB, O, T extends SortField<DB, TB, O>> = T["key"] extends keyof O & string ? T["key"] : T["expression"] extends keyof O & string ? T["expression"] : T["expression"] extends `${string}.${infer K}` ? K extends keyof O & string ? K : never : never;
 type Fields<DB, TB extends keyof DB, O> = ReadonlyArray<Readonly<SortField<DB, TB, O>>>;
 type FieldNames<DB, TB extends keyof DB, O, T extends Fields<DB, TB, O>> = {
@@ -95,4 +107,4 @@ declare function executeWithOffsetPagination<O, DB, TB extends keyof DB>(qb: Sel
     executeOptions?: AbortableQueryOptions;
 }): Promise<OffsetPaginationResult<O>>;
 
-export { type CursorDecoder, type CursorEncoder, type CursorPaginationResult, type CursorParser, type Fields, type OffsetPaginationResult, SIMPLE_COLUMN_DATA_TYPES, type SimpleColumnDataType, type SortField, defaultDecodeCursor, defaultEncodeCursor, executeWithCursorPagination, executeWithOffsetPagination, getCursorEncoder };
+export { type CursorDecoder, type CursorEncoder, type CursorPaginationResult, type CursorParser, type Fields, InvalidCursorError, type OffsetPaginationResult, SIMPLE_COLUMN_DATA_TYPES, type SimpleColumnDataType, type SortField, defaultDecodeCursor, defaultEncodeCursor, executeWithCursorPagination, executeWithOffsetPagination, getCursorEncoder };

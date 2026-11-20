@@ -41,12 +41,26 @@ export type SortField<DB, TB extends keyof DB, O> =
         | (StringReference<DB, TB> & `${string}.${keyof O & string}`);
       direction: OrderByDirection;
       key?: keyof O & string;
+      seek?: boolean;
     }>
   | RequireNullableAndDataType<{
       expression: ReferenceExpression<DB, TB>;
       direction: OrderByDirection;
       key: keyof O & string;
+      seek?: boolean;
     }>;
+
+/**
+ * A cursor that cannot be read: not this library's encoding, written for
+ * other sort fields, or rejected by `parseCursor`. The original error, when
+ * there is one, is the `cause`. A caller can treat it as bad input.
+ */
+export class InvalidCursorError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "InvalidCursorError";
+  }
+}
 
 type ExtractSortFieldKey<
   DB,
@@ -220,13 +234,31 @@ export async function executeWithCursorPagination<
 
   const reversed = !!opts.before && !opts.after;
 
+  fields.forEach((field, index) => {
+    if (field.seek && (index > 0 || field.nullable)) {
+      throw new Error(
+        `'seek' needs the leading, non-nullable sort field: '${field.key}'`,
+      );
+    }
+  });
+
+  function readCursor(encoded: string) {
+    try {
+      return parseCursor(decodeCursor(encoded, fieldNames));
+    } catch (error) {
+      if (error instanceof InvalidCursorError) {
+        throw error;
+      }
+      throw new InvalidCursorError("Invalid cursor", { cause: error });
+    }
+  }
+
   function applyCursor(
     qb: SelectQueryBuilder<DB, TB, O>,
     encoded: string,
     defaultDirection: "asc" | "desc",
   ) {
-    const decoded = decodeCursor(encoded, fieldNames);
-    const cursor = parseCursor(decoded);
+    const cursor = readCursor(encoded);
 
     return qb.where(({ and, or, eb }) => {
       let expression;
@@ -277,6 +309,17 @@ export async function executeWithCursorPagination<
 
       if (!expression) {
         throw new Error("Error building cursor expression");
+      }
+
+      // The OR above implies `lead >= value` (or `<=`), but Postgres cannot
+      // turn an OR into an index condition. Stating the bound lets an index on
+      // the leading field seek to the cursor instead of scanning from the
+      // start of the order.
+      const lead = fields[0]!;
+      if (lead.seek) {
+        const comparison = lead.direction === defaultDirection ? ">=" : "<=";
+        const value = cursor[lead.key as keyof typeof cursor];
+        return and([eb(lead.expression, comparison, value), expression]);
       }
 
       return expression;
@@ -428,12 +471,12 @@ export function defaultDecodeCursor<
         Buffer.from(cursor, "base64url").toString("utf8"),
       ).entries(),
     ] as [string, string | null][];
-  } catch {
-    throw new Error("Unparsable cursor");
+  } catch (error) {
+    throw new InvalidCursorError("Unparsable cursor", { cause: error });
   }
 
   if (parsed.length !== fields.length) {
-    throw new Error("Unexpected number of fields");
+    throw new InvalidCursorError("Unexpected number of fields");
   }
 
   for (let i = 0; i < fields.length; i++) {
@@ -441,11 +484,11 @@ export function defaultDecodeCursor<
     const expectedName = fields[i];
 
     if (!field) {
-      throw new Error("Unable to find field");
+      throw new InvalidCursorError("Unable to find field");
     }
 
     if (field[0] !== expectedName) {
-      throw new Error("Unexpected field name");
+      throw new InvalidCursorError("Unexpected field name");
     }
 
     if (field[1] === "null") {

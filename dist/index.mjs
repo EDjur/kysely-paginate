@@ -18,6 +18,12 @@ var SIMPLE_COLUMN_DATA_TYPES = [
   "timestamp",
   "timestamptz"
 ];
+var InvalidCursorError = class extends Error {
+  constructor(message, options) {
+    super(message, options);
+    this.name = "InvalidCursorError";
+  }
+};
 function resolveFieldKey(field) {
   if (field.key) {
     return field.key;
@@ -44,9 +50,25 @@ async function executeWithCursorPagination(qb, opts) {
   });
   const fieldNames = fields.map((field) => field.key);
   const reversed = !!opts.before && !opts.after;
+  fields.forEach((field, index) => {
+    if (field.seek && (index > 0 || field.nullable)) {
+      throw new Error(
+        `'seek' needs the leading, non-nullable sort field: '${field.key}'`
+      );
+    }
+  });
+  function readCursor(encoded) {
+    try {
+      return parseCursor(decodeCursor(encoded, fieldNames));
+    } catch (error) {
+      if (error instanceof InvalidCursorError) {
+        throw error;
+      }
+      throw new InvalidCursorError("Invalid cursor", { cause: error });
+    }
+  }
   function applyCursor(qb2, encoded, defaultDirection) {
-    const decoded = decodeCursor(encoded, fieldNames);
-    const cursor = parseCursor(decoded);
+    const cursor = readCursor(encoded);
     return qb2.where(({ and, or, eb }) => {
       let expression;
       for (let i = fields.length - 1; i >= 0; --i) {
@@ -76,6 +98,12 @@ async function executeWithCursorPagination(qb, opts) {
       }
       if (!expression) {
         throw new Error("Error building cursor expression");
+      }
+      const lead = fields[0];
+      if (lead.seek) {
+        const comparison = lead.direction === defaultDirection ? ">=" : "<=";
+        const value = cursor[lead.key];
+        return and([eb(lead.expression, comparison, value), expression]);
       }
       return expression;
     });
@@ -166,20 +194,20 @@ function defaultDecodeCursor(cursor, fields) {
         Buffer.from(cursor, "base64url").toString("utf8")
       ).entries()
     ];
-  } catch {
-    throw new Error("Unparsable cursor");
+  } catch (error) {
+    throw new InvalidCursorError("Unparsable cursor", { cause: error });
   }
   if (parsed.length !== fields.length) {
-    throw new Error("Unexpected number of fields");
+    throw new InvalidCursorError("Unexpected number of fields");
   }
   for (let i = 0; i < fields.length; i++) {
     const field = parsed[i];
     const expectedName = fields[i];
     if (!field) {
-      throw new Error("Unable to find field");
+      throw new InvalidCursorError("Unable to find field");
     }
     if (field[0] !== expectedName) {
-      throw new Error("Unexpected field name");
+      throw new InvalidCursorError("Unexpected field name");
     }
     if (field[1] === "null") {
       field[1] = null;
@@ -214,6 +242,7 @@ async function executeWithOffsetPagination(qb, opts) {
   };
 }
 export {
+  InvalidCursorError,
   SIMPLE_COLUMN_DATA_TYPES,
   defaultDecodeCursor,
   defaultEncodeCursor,
